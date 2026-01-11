@@ -27,10 +27,12 @@ else:
     cred_path = local_secret_path
     print(f"Using Local File: {local_secret_path}")
 
-# Initialize Firebase with the correct file path
+# Initialize Firebase ONLY if it hasn't been initialized yet
 try:
-    cred = credentials.Certificate(cred_path)
-    firebase_admin.initialize_app(cred)
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(cred_path)
+        firebase_admin.initialize_app(cred)
+    
     db = firestore.client()
 except Exception as e:
     print(f"Failed to initialize Firebase: {e}")
