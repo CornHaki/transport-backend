@@ -9,6 +9,7 @@ from email.mime.application import MIMEApplication
 from fpdf import FPDF
 import uuid
 from datetime import datetime
+import threading
 import os
 from dotenv import load_dotenv
 
@@ -397,14 +398,24 @@ def create_booking():
         db.collection('orders').document(order_id).set(new_order)
 
         data['id'] = order_id 
-        try:
-            pdf_file = generate_pdf(data, order_id)
-            send_email_with_pdf(pdf_file, data)
-            if os.path.exists(pdf_file):
-                os.remove(pdf_file)
-        except Exception as e:
-            print(f"PDF/Email failed but DB saved: {e}")
-
+        def handle_email_background(data, order_id):
+            """Helper function to run in a separate thread"""
+            try:
+                # Re-initialize Firebase app context if needed (safeguard)
+                # or just perform non-DB logic here since we have the data
+                pdf_file = generate_pdf(data, order_id)
+                if send_email_with_pdf(pdf_file, data):
+                    print(f"✅ Email sent for {order_id}")
+                else:
+                    print(f"❌ Email failed for {order_id}")
+                
+                if os.path.exists(pdf_file):
+                    os.remove(pdf_file)
+            except Exception as e:
+                print(f"⚠️ Background Email Error: {e}")
+                
+        email_thread = threading.Thread(target=handle_email_background, args=(data, order_id))
+        email_thread.start()
         return jsonify({"success": True, "bookingId": order_id}), 201
 
     except Exception as e:
