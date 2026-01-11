@@ -62,7 +62,7 @@ firebase_creds_dict = {
 ADMIN_PASSWORD = os.getenv("admin_PASSWORD")
 COMPANY_ID = os.getenv("company_id")
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # --- EMAIL CONFIG ---
 SMTP_SERVER = 'smtp.gmail.com'
