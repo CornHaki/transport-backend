@@ -32,6 +32,7 @@ try:
     if not firebase_admin._apps:
         cred = credentials.Certificate(cred_path)
         firebase_admin.initialize_app(cred)
+        print("✅ Firebase initialized successfully.")
     
     db = firestore.client()
 except Exception as e:
@@ -55,10 +56,6 @@ firebase_creds_dict = {
     "universe_domain": os.getenv("FIREBASE_UNIVERSE_DOMAIN")
 }
 
-# --- CONFIGURATION ---
-cred = credentials.Certificate(firebase_creds_dict)
-firebase_admin.initialize_app(cred)
-db = firestore.client()
 
 
 
