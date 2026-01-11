@@ -14,6 +14,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Define the path to the key
+# Render stores secret files at /etc/secrets/
+render_secret_path = "/etc/secrets/firebase_key.json"
+local_secret_path = "firebase_key.json"
+
+# Check if we are running on Render (file exists there) or locally
+if os.path.exists(render_secret_path):
+    cred_path = render_secret_path
+    print(f"Using Render Secret File: {render_secret_path}")
+else:
+    cred_path = local_secret_path
+    print(f"Using Local File: {local_secret_path}")
+
+# Initialize Firebase with the correct file path
+try:
+    cred = credentials.Certificate(cred_path)
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
+except Exception as e:
+    print(f"Failed to initialize Firebase: {e}")
+    
 # Reconstruct the Firebase credentials dictionary from environment variables
 firebase_creds_dict = {
     "type": os.getenv("FIREBASE_TYPE"),
