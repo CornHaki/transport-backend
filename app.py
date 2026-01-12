@@ -2,10 +2,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
+import resend  # <--- CHANGED: Import Resend instead of smtplib
 from fpdf import FPDF
 import uuid
 from datetime import datetime
@@ -15,20 +12,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ==========================================
+#  🔥 FIREBASE SETUP
+# ==========================================
 # Define the path to the key
-# Render stores secret files at /etc/secrets/
 render_secret_path = "/etc/secrets/firebase_key.json"
 local_secret_path = "firebase_key.json"
 
-# Check if we are running on Render (file exists there) or locally
 if os.path.exists(render_secret_path):
     cred_path = render_secret_path
-    print(f"Using Render Secret File: {render_secret_path}")
 else:
     cred_path = local_secret_path
-    print(f"Using Local File: {local_secret_path}")
 
-# Initialize Firebase ONLY if it hasn't been initialized yet
+# Initialize Firebase
 try:
     if not firebase_admin._apps:
         cred = credentials.Certificate(cred_path)
@@ -38,67 +34,41 @@ try:
     db = firestore.client()
 except Exception as e:
     print(f"Failed to initialize Firebase: {e}")
-    
-# Reconstruct the Firebase credentials dictionary from environment variables
-firebase_creds_dict = {
-    "type": os.getenv("FIREBASE_TYPE"),
-    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
-    # ... inside your configuration dictionary in app.py ...
-    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n') if os.getenv("FIREBASE_PRIVATE_KEY") else None,
-# ...
-    # IMPORTANT: Replace literal \n string with actual newline characters
-    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n') if os.getenv("FIREBASE_PRIVATE_KEY") else None,
-    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
-    "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-    "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
-    "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
-    "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_CERT_URL"),
-    "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL"),
-    "universe_domain": os.getenv("FIREBASE_UNIVERSE_DOMAIN")
-}
 
-
-
-
-ADMIN_PASSWORD = os.getenv("admin_PASSWORD")
-COMPANY_ID = os.getenv("company_id")
+# ==========================================
+#  ⚙️ CONFIGURATION
+# ==========================================
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# --- EMAIL CONFIG ---
-SMTP_SERVER = 'smtp.gmail.com'
-SMTP_PORT = 587
-SYSTEM_EMAIL = os.getenv("MAIL_USERNAME")
-SYSTEM_PASSWORD = os.getenv("MAIL_PASSWORD")
+ADMIN_PASSWORD = os.getenv("admin_PASSWORD")
+COMPANY_ID = os.getenv("company_id")
 COMPANY_EMAIL = "raimonacargo@gmail.com"
 
+# --- EMAIL CONFIG (UPDATED FOR VERCEL) ---
+# We retrieve the key safely from environment variables
+resend.api_key = os.getenv("RESEND_API_KEY")
+
 # ==========================================
-#  🎨 ADVANCED DARK THEME PDF CLASS
+#  🎨 PDF CLASS
 # ==========================================
 class PDF(FPDF):
     def header(self):
-        # 1. Dark Background for the whole page
-        # Note: FPDF adds pages white by default. We draw a big rect.
-        # But header() runs at start of page.
-        self.set_fill_color(15, 23, 42) # #0f172a (Slate 900)
+        self.set_fill_color(15, 23, 42)
         self.rect(0, 0, 210, 297, 'F')
-
-        # 2. Header Gradient/Shape Effect (Top Banner)
-        self.set_fill_color(30, 41, 59) # #1e293b (Slate 800)
+        self.set_fill_color(30, 41, 59)
         self.rect(0, 0, 210, 50, 'F')
         
-        # 3. Logo / Brand Text
         self.set_font('Arial', 'B', 24)
-        self.set_text_color(255, 255, 255) # White
+        self.set_text_color(255, 255, 255)
         self.set_xy(10, 15)
         self.cell(0, 10, 'RAIMONA CARGO', 0, 1, 'L')
         
         self.set_font('Arial', '', 10)
-        self.set_text_color(148, 163, 184) # Slate 400
+        self.set_text_color(148, 163, 184)
         self.set_xy(10, 25)
         self.cell(0, 5, 'Logistics & Transportation Solutions', 0, 1, 'L')
 
-        # 4. "INVOICE" Title (Right Side)
         self.set_font('Arial', 'B', 32)
         self.set_text_color(255, 255, 255)
         self.set_xy(140, 15)
@@ -107,18 +77,12 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-30)
         self.set_font('Arial', 'I', 8)
-        self.set_text_color(148, 163, 184) # Slate 400
+        self.set_text_color(148, 163, 184)
         self.cell(0, 10, 'Thank you for your business. For support: raimonacargo@gmail.com', 0, 1, 'C')
         self.cell(0, 5, f'Page {self.page_no()}', 0, 0, 'C')
 
 # ==========================================
 #  🖨️ GENERATE PDF FUNCTION
-# ==========================================
-# ==========================================
-#  🖨️ GENERATE PDF FUNCTION (Updated)
-# ==========================================
-# ==========================================
-#  🖨️ GENERATE PDF FUNCTION (Fixed Layout)
 # ==========================================
 def generate_pdf(data, booking_id):
     pdf = PDF()
@@ -127,7 +91,7 @@ def generate_pdf(data, booking_id):
     # --- ORDER ID BADGE ---
     pdf.set_xy(140, 32)
     pdf.set_font('Arial', 'B', 10)
-    pdf.set_text_color(147, 197, 253) # Blue 300
+    pdf.set_text_color(147, 197, 253)
     pdf.cell(60, 8, f"#{booking_id}", 0, 1, 'R')
 
     # --- STATUS BAR ---
@@ -166,7 +130,7 @@ def generate_pdf(data, booking_id):
     pdf.set_fill_color(255, 255, 255)
     pdf.rect(10, 80, 190, 180, 'F')
     
-    # 1. BILL TO SECTION (Left)
+    # 1. BILL TO SECTION
     pdf.set_xy(20, 90)
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(148, 163, 184) 
@@ -186,7 +150,6 @@ def generate_pdf(data, booking_id):
     pdf.set_x(20)
     pdf.cell(80, 6, data.get('phone', ''), 0, 1)
     
-    # Address Handling (Left Side)
     address = data.get('address', '')
     pdf.set_x(20)
     if len(address) > 40:
@@ -194,45 +157,31 @@ def generate_pdf(data, booking_id):
     else:
         pdf.cell(80, 6, address, 0, 1)
     
-    y_end_left = pdf.get_y()
-
-    # 2. SHIPMENT DETAILS (Right Side - Gray Box)
-    pdf.set_xy(110, 90)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.set_text_color(148, 163, 184)
-    pdf.cell(80, 8, "SHIPMENT DETAILS", 0, 1)
-    
-    # Gray Background Box (Height increased to 60 to fit wrapped text)
+    # 2. SHIPMENT DETAILS
     box_top_y = 100
     pdf.set_fill_color(248, 250, 252) 
     pdf.rect(110, box_top_y, 80, 60, 'F') 
     
-    # -- Route Section --
     pdf.set_xy(115, box_top_y + 5)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(100, 116, 139)
     pdf.cell(80, 5, "ROUTE", 0, 2)
     
-    # Online Label
     route_content_y = pdf.get_y() + 2
     pdf.set_xy(115, route_content_y)
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(15, 23, 42)
     pdf.cell(15, 5, "Online", 0, 0)
     
-    # Arrow
     pdf.set_text_color(148, 163, 184)
     pdf.cell(8, 5, ">>", 0, 0, 'C')
     
-    # Destination (Wrapped inside box)
-    pdf.set_text_color(37, 99, 235) # Blue 600
-    dest_x = 138 # 115 + 15 + 8
+    pdf.set_text_color(37, 99, 235)
+    dest_x = 138
     pdf.set_xy(dest_x, route_content_y)
-    # 47 width ensures it fits within the 80 width box (110+80=190 boundary)
     pdf.multi_cell(47, 5, data.get('address', 'Dest'), 0, 'L')
     
-    # -- Item Description (Dynamic Position below Route) --
-    new_y = pdf.get_y() + 6 # Add padding below address
+    new_y = pdf.get_y() + 6
     pdf.set_xy(115, new_y)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(100, 116, 139)
@@ -240,25 +189,19 @@ def generate_pdf(data, booking_id):
     
     pdf.set_font('Arial', 'I', 9)
     pdf.set_text_color(71, 85, 105)
-    # Wrap item description inside box
     pdf.set_x(115)
     pdf.multi_cell(70, 5, data.get('productDescription', '-'))
     
-    y_end_right = pdf.get_y()
-
     # 3. SERVICE TABLE
-    # Ensure table starts below the lowest point of either column
-    y_table = max(y_end_left, y_end_right, box_top_y + 60) + 15
+    y_table = 180 # Fixed position for stability
     pdf.set_xy(20, y_table)
     
-    # Table Header
     pdf.set_fill_color(241, 245, 249) 
     pdf.set_text_color(71, 85, 105) 
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(110, 10, "  SERVICE TYPE", 0, 0, 'L', True)
     pdf.cell(60, 10, "QUANTITY / WEIGHT  ", 0, 1, 'R', True)
     
-    # Table Row
     pdf.set_font('Arial', 'B', 11)
     pdf.set_text_color(15, 23, 42) 
     
@@ -271,91 +214,66 @@ def generate_pdf(data, booking_id):
     pdf.cell(110, 12, f"  {service_name}", 0, 0, 'L')
     pdf.cell(60, 12, f"{qty} {unit}  ", 0, 1, 'R')
     
-    # Bottom Line
     pdf.set_draw_color(226, 232, 240)
     pdf.line(20, pdf.get_y()+12, 190, pdf.get_y()+12)
 
-    filename = f"booking_{booking_id}.pdf"
+    filename = f"/tmp/booking_{booking_id}.pdf" # Use /tmp for serverless (Vercel)
     pdf.output(filename)
     return filename
 
 # ==========================================
-#  📧 EMAIL FUNCTION (HTML Email Matching Theme)
+#  📧 EMAIL FUNCTION (REPLACED WITH RESEND API)
 # ==========================================
 def send_email_with_pdf(pdf_filename, data):
     customer_email = data.get('email', '')
     customer_name = data.get('fullName', 'Customer')
 
-    recipients = [COMPANY_EMAIL]
-    if customer_email and '@' in customer_email:
-        recipients.append(customer_email)
-
-    msg = MIMEMultipart()
-    msg['From'] = SYSTEM_EMAIL
-    msg['To'] = ", ".join(recipients)
-    msg['Reply-To'] = customer_email
-    msg['Subject'] = f"Booking Confirmation #{data.get('id')}"
-
-    # --- DARK THEME EMAIL HTML ---
+    # HTML Content
     html_body = f"""
     <html>
       <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #0f172a; color: #e2e8f0;">
         <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 8px; overflow: hidden; margin-top: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
           
           <div style="background: linear-gradient(to right, #234c6a, #7294ad); padding: 30px; text-align: center;">
-            <h1 style="margin: 0; color: white; font-size: 24px; text-transform: uppercase; letter-spacing: 1px;">Raimona Cargo</h1>
-            <p style="margin: 5px 0 0; color: #e0f2fe; font-size: 12px; text-transform: uppercase;">Logistics & Transportation</p>
+            <h1 style="margin: 0; color: white; font-size: 24px;">Raimona Cargo</h1>
           </div>
 
           <div style="padding: 40px;">
             <h2 style="color: #ffffff; margin-top: 0;">Booking Confirmed</h2>
             <p style="color: #94a3b8;">Dear {customer_name},</p>
-            <p style="color: #cbd5e1; line-height: 1.6;">
+            <p style="color: #cbd5e1;">
               Thank you for choosing Raimona Cargo. Your shipment has been successfully scheduled. 
-              Please find your official invoice attached to this email.
+              Please find your official invoice attached.
             </p>
-            
-            <div style="background-color: #0f172a; border-radius: 6px; padding: 20px; margin: 20px 0; border: 1px solid #334155;">
-              <table style="width: 100%; color: #e2e8f0;">
-                <tr>
-                  <td style="padding: 8px 0; color: #94a3b8; font-size: 12px; text-transform: uppercase;">Order ID</td>
-                  <td style="padding: 8px 0; text-align: right; font-weight: bold;">#{data.get('id')}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #94a3b8; font-size: 12px; text-transform: uppercase;">Destination</td>
-                  <td style="padding: 8px 0; text-align: right; font-weight: bold;">{data.get('address')}</td>
-                </tr>
-              </table>
-            </div>
-
-            <p style="color: #94a3b8; font-size: 14px; text-align: center;">
-              📎 <strong>Your Invoice PDF is attached below.</strong>
-            </p>
-          </div>
-
-          <div style="background-color: #0f172a; padding: 20px; text-align: center; color: #64748b; font-size: 12px;">
-            <p>&copy; 2026 Raimona Cargo. All rights reserved.</p>
           </div>
         </div>
       </body>
     </html>
     """
-    msg.attach(MIMEText(html_body, 'html')) 
-
-    with open(pdf_filename, "rb") as f:
-        attach = MIMEApplication(f.read(),_subtype="pdf")
-        attach.add_header('Content-Disposition','attachment',filename=str(pdf_filename))
-        msg.attach(attach)
 
     try:
-        s = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        s.starttls()
-        s.login(SYSTEM_EMAIL, SYSTEM_PASSWORD)
-        s.send_message(msg)
-        s.quit()
+        # Read the PDF file as a list of bytes
+        with open(pdf_filename, "rb") as f:
+            pdf_bytes = list(f.read())
+
+        # Send via Resend API
+        r = resend.Emails.send({
+            "from": "Raimona Cargo <onboarding@resend.dev>", # Change this after verifying your domain in Resend
+            "to": [customer_email, COMPANY_EMAIL],
+            "subject": f"Booking Confirmation #{data.get('id')}",
+            "html": html_body,
+            "attachments": [
+                {
+                    "filename": f"Invoice-{data.get('id')}.pdf",
+                    "content": pdf_bytes
+                }
+            ]
+        })
+        print(f"✅ Email sent successfully via Resend. ID: {r.get('id')}")
         return True
+
     except Exception as e:
-        print(f"Email Error: {e}")
+        print(f"❌ Email Error: {e}")
         return False
 
 # ==========================================
@@ -398,17 +316,14 @@ def create_booking():
         db.collection('orders').document(order_id).set(new_order)
 
         data['id'] = order_id 
+        
+        # Run email in background
         def handle_email_background(data, order_id):
-            """Helper function to run in a separate thread"""
             try:
-                # Re-initialize Firebase app context if needed (safeguard)
-                # or just perform non-DB logic here since we have the data
                 pdf_file = generate_pdf(data, order_id)
-                if send_email_with_pdf(pdf_file, data):
-                    print(f"✅ Email sent for {order_id}")
-                else:
-                    print(f"❌ Email failed for {order_id}")
+                send_email_with_pdf(pdf_file, data)
                 
+                # Cleanup: Remove the temporary PDF file
                 if os.path.exists(pdf_file):
                     os.remove(pdf_file)
             except Exception as e:
@@ -416,6 +331,7 @@ def create_booking():
                 
         email_thread = threading.Thread(target=handle_email_background, args=(data, order_id))
         email_thread.start()
+        
         return jsonify({"success": True, "bookingId": order_id}), 201
 
     except Exception as e:
