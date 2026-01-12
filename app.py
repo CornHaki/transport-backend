@@ -207,7 +207,7 @@ def generate_pdf(data, booking_id):
     
     qty = float(data.get('weight', 0)) if data.get('orderType') == 'weight' else float(data.get('boxCount', 0))
     unit = 'kg' if data.get('orderType') == 'weight' else 'boxes'
-    service_name = "Air Freight Service" if data.get('orderType') == 'weight' else "Standard Box Delivery"
+    service_name = "Standard Delivery Service" if data.get('orderType') == 'weight' else "Standard Box Delivery"
     
     pdf.ln(10)
     pdf.set_x(20)
