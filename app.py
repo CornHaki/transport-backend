@@ -222,30 +222,75 @@ def generate_pdf(data, booking_id):
     return filename
 
 # ==========================================
-#  📧 EMAIL FUNCTION (REPLACED WITH RESEND API)
+#  📧 EMAIL FUNCTION (UPDATED STYLING)
 # ==========================================
 def send_email_with_pdf(pdf_filename, data):
     customer_email = data.get('email', '')
     customer_name = data.get('fullName', 'Customer')
-
-    # HTML Content
+    customer_phone = data.get('phone', 'N/A')
+    
+    # HTML Content - Styled to match your screenshot (Dark Mode Card)
     html_body = f"""
+    <!DOCTYPE html>
     <html>
-      <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #0f172a; color: #e2e8f0;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 8px; overflow: hidden; margin-top: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+      <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #0f172a; color: #e2e8f0;">
+        
+        <div style="width: 100%; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
           
-          <div style="background: linear-gradient(to right, #234c6a, #7294ad); padding: 30px; text-align: center;">
-            <h1 style="margin: 0; color: white; font-size: 24px;">Raimona Cargo</h1>
-          </div>
+          <div style="background-color: #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);">
+            
+            <div style="padding: 40px 30px;">
+              
+              <h2 style="color: #ffffff; font-size: 22px; font-weight: 600; margin: 0 0 10px 0; letter-spacing: 0.5px;">New Booking Received</h2>
+              <p style="color: #94a3b8; font-size: 14px; margin: 0 0 30px 0; line-height: 1.5;">
+                A new shipment booking has been placed successfully.
+              </p>
 
-          <div style="padding: 40px;">
-            <h2 style="color: #ffffff; margin-top: 0;">Booking Confirmed</h2>
-            <p style="color: #94a3b8;">Dear {customer_name},</p>
-            <p style="color: #cbd5e1;">
-              Thank you for choosing Raimona Cargo. Your shipment has been successfully scheduled. 
-              Please find your official invoice attached.
-            </p>
+              <table style="width: 100%; border-collapse: collapse;">
+                
+                <tr>
+                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Customer:</td>
+                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">
+                    {customer_name}
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Email:</td>
+                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; text-align: right;">
+                    <a href="mailto:{customer_email}" style="color: #3b82f6; text-decoration: none; font-size: 14px; font-weight: 500;">{customer_email}</a>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Phone:</td>
+                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">
+                    {customer_phone}
+                  </td>
+                </tr>
+
+                <tr>
+                   <td style="padding: 16px 0; color: #94a3b8; font-size: 14px; vertical-align: top;">Destination:</td>
+                   <td style="padding: 16px 0; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">
+                     {data.get('address', 'N/A')}
+                   </td>
+                </tr>
+
+              </table>
+
+              <div style="margin-top: 30px;">
+                <p style="font-size: 12px; color: #64748b; text-align: center;">
+                  The official invoice PDF is attached to this email.
+                </p>
+              </div>
+
+            </div>
           </div>
+          
+          <p style="text-align: center; color: #475569; font-size: 12px; margin-top: 20px;">
+            &copy; 2026 Raimona Cargo. All rights reserved.
+          </p>
+
         </div>
       </body>
     </html>
@@ -258,9 +303,9 @@ def send_email_with_pdf(pdf_filename, data):
 
         # Send via Resend API
         r = resend.Emails.send({
-            "from": "Raimona Cargo <noreply@raimonacargo.in>", # Change this after verifying your domain in Resend
+            "from": "Raimona Cargo <noreply@raimonacargo.in>", 
             "to": [customer_email, COMPANY_EMAIL],
-            "subject": f"Booking Confirmation #{data.get('id')}",
+            "subject": f"New Booking Request #{data.get('id')}", 
             "html": html_body,
             "attachments": [
                 {
