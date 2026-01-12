@@ -258,7 +258,7 @@ def send_email_with_pdf(pdf_filename, data):
 
         # Send via Resend API
         r = resend.Emails.send({
-            "from": "Raimona Cargo <onboarding@resend.dev>", # Change this after verifying your domain in Resend
+            "from": "Raimona Cargo <noreply@raimonacargo.in>", # Change this after verifying your domain in Resend
             "to": [customer_email, COMPANY_EMAIL],
             "subject": f"Booking Confirmation #{data.get('id')}",
             "html": html_body,
