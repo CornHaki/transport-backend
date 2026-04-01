@@ -2,10 +2,10 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import resend  # <--- CHANGED: Import Resend instead of smtplib
+import resend
 from fpdf import FPDF
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
 import os
 from dotenv import load_dotenv
@@ -15,7 +15,6 @@ load_dotenv()
 # ==========================================
 #  🔥 FIREBASE SETUP
 # ==========================================
-# Define the path to the key
 render_secret_path = "/etc/secrets/firebase_key.json"
 local_secret_path = "firebase_key.json"
 
@@ -24,7 +23,6 @@ if os.path.exists(render_secret_path):
 else:
     cred_path = local_secret_path
 
-# Initialize Firebase
 try:
     if not firebase_admin._apps:
         cred = credentials.Certificate(cred_path)
@@ -45,8 +43,6 @@ ADMIN_PASSWORD = os.getenv("admin_PASSWORD")
 COMPANY_ID = os.getenv("company_id")
 COMPANY_EMAIL = "raimonacargo@gmail.com"
 
-# --- EMAIL CONFIG (UPDATED FOR VERCEL) ---
-# We retrieve the key safely from environment variables
 resend.api_key = os.getenv("RESEND_API_KEY")
 
 # ==========================================
@@ -99,16 +95,14 @@ def generate_pdf(data, booking_id):
     pdf.set_fill_color(255, 255, 255) 
     pdf.rect(0, 50, 210, 20, 'F')
     
-    # Date Label
     pdf.set_xy(10, 53)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(100, 116, 139) 
     pdf.cell(30, 5, "DATE ISSUED", 0, 2)
     pdf.set_font('Arial', 'B', 11)
     pdf.set_text_color(30, 41, 59) 
-    pdf.cell(30, 6, datetime.now().strftime('%b %d, %Y'), 0, 0)
+    pdf.cell(30, 6, datetime.now(timezone.utc).strftime('%b %d, %Y'), 0, 0)
 
-    # Due Date
     pdf.set_xy(60, 53)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(100, 116, 139)
@@ -117,7 +111,6 @@ def generate_pdf(data, booking_id):
     pdf.set_text_color(30, 41, 59)
     pdf.cell(30, 6, "Upon Receipt", 0, 0)
 
-    # Status Badge
     pdf.set_xy(160, 55)
     pdf.set_fill_color(254, 243, 199) 
     pdf.set_text_color(180, 83, 9)   
@@ -128,72 +121,94 @@ def generate_pdf(data, booking_id):
 
     # --- MAIN CONTENT AREA ---
     pdf.set_fill_color(255, 255, 255)
-    pdf.rect(10, 80, 190, 180, 'F')
-    
-    # 1. BILL TO SECTION
-    pdf.set_xy(20, 90)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.set_text_color(148, 163, 184) 
-    pdf.cell(80, 8, "BILL TO", 0, 1)
-    
-    pdf.set_font('Arial', 'B', 14)
-    pdf.set_text_color(15, 23, 42) 
+    pdf.rect(10, 80, 190, 200, 'F')
+
+    # 1. CLIENT DETAILS SECTION
+    pdf.set_xy(20, 88)
+    pdf.set_font('Arial', 'B', 8)
+    pdf.set_text_color(148, 163, 184)
+    pdf.cell(0, 6, "CLIENT DETAILS", 0, 1)
+
+    pdf.set_draw_color(226, 232, 240)
+    pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+    pdf.ln(4)
+
     pdf.set_x(20)
-    pdf.cell(80, 8, data.get('fullName', 'Guest'), 0, 1)
-    
+    pdf.set_font('Arial', 'B', 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(85, 5, "NAME", 0, 0)
+    pdf.cell(85, 5, "EMAIL", 0, 1)
+
+    pdf.set_x(20)
+    pdf.set_font('Arial', 'B', 13)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(85, 7, data.get('fullName', '—'), 0, 0)
     pdf.set_font('Arial', '', 10)
     pdf.set_text_color(59, 130, 246)
+    pdf.cell(85, 7, data.get('email', '—'), 0, 1)
+
+    pdf.ln(3)
+
     pdf.set_x(20)
-    pdf.cell(80, 6, data.get('email', ''), 0, 1)
-    
-    pdf.set_text_color(71, 85, 105) 
-    pdf.set_x(20)
-    pdf.cell(80, 6, data.get('phone', ''), 0, 1)
-    
-    address = data.get('address', '')
-    pdf.set_x(20)
-    if len(address) > 40:
-        pdf.multi_cell(80, 5, address)
-    else:
-        pdf.cell(80, 6, address, 0, 1)
-    
-    # 2. SHIPMENT DETAILS
-    box_top_y = 100
-    pdf.set_fill_color(248, 250, 252) 
-    pdf.rect(110, box_top_y, 80, 60, 'F') 
-    
-    pdf.set_xy(115, box_top_y + 5)
     pdf.set_font('Arial', 'B', 8)
     pdf.set_text_color(100, 116, 139)
-    pdf.cell(80, 5, "ROUTE", 0, 2)
+    pdf.cell(85, 5, "PHONE", 0, 0)
+    pdf.cell(85, 5, "ITEM DESCRIPTION", 0, 1)
+
+    pdf.set_x(20)
+    pdf.set_font('Arial', '', 10)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(85, 6, data.get('phone', '—'), 0, 0)
+    pdf.set_font('Arial', 'I', 9)
+    pdf.cell(85, 6, f'"{data.get("productDescription", "—")}"', 0, 1)
+
+    pdf.ln(10)
+
+    # ✅ 2. NEW SEPARATED SHIPMENT ROUTE SECTION
+    pdf.set_x(20)
+    pdf.set_font('Arial', 'B', 8)
+    pdf.set_text_color(148, 163, 184)
+    pdf.cell(0, 6, "SHIPMENT ROUTE", 0, 1)
+    pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+    pdf.ln(4)
+
+    pdf.set_x(20)
+    pdf.set_font('Arial', 'B', 8)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(85, 5, "ORIGIN / PICKUP", 0, 0)
+    pdf.cell(85, 5, "DESTINATION", 0, 1)
+
+    pickup_address = data.get('address', '—')
+    destination_address = data.get('destinationAddress', '—')
+
+    y_before = pdf.get_y()
     
-    route_content_y = pdf.get_y() + 2
-    pdf.set_xy(115, route_content_y)
+    # Left Side: Pickup
+    pdf.set_xy(20, y_before)
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(15, 5, "Online", 0, 0)
-    
+    pdf.multi_cell(75, 5, pickup_address, 0, 'L')
+    y_after_pickup = pdf.get_y()
+
+    # Arrow indicator in the middle
+    pdf.set_xy(95, y_before)
+    pdf.set_font('Arial', 'B', 14)
     pdf.set_text_color(148, 163, 184)
-    pdf.cell(8, 5, ">>", 0, 0, 'C')
-    
-    pdf.set_text_color(37, 99, 235)
-    dest_x = 138
-    pdf.set_xy(dest_x, route_content_y)
-    pdf.multi_cell(47, 5, data.get('address', 'Dest'), 0, 'L')
-    
-    new_y = pdf.get_y() + 6
-    pdf.set_xy(115, new_y)
-    pdf.set_font('Arial', 'B', 8)
-    pdf.set_text_color(100, 116, 139)
-    pdf.cell(80, 5, "ITEM DESCRIPTION", 0, 2)
-    
-    pdf.set_font('Arial', 'I', 9)
-    pdf.set_text_color(71, 85, 105)
-    pdf.set_x(115)
-    pdf.multi_cell(70, 5, data.get('productDescription', '-'))
-    
+    pdf.cell(10, 5, ">>", 0, 0, 'C')
+
+    # Right Side: Destination
+    pdf.set_xy(105, y_before)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_text_color(37, 99, 235) # Highlights destination in blue
+    pdf.multi_cell(75, 5, destination_address, 0, 'L')
+    y_after_dest = pdf.get_y()
+
+    # Reset Y to the bottom of whichever address was longer
+    pdf.set_y(max(y_after_pickup, y_after_dest))
+    pdf.ln(8)
+
     # 3. SERVICE TABLE
-    y_table = 180 # Fixed position for stability
+    y_table = pdf.get_y() + 4
     pdf.set_xy(20, y_table)
     
     pdf.set_fill_color(241, 245, 249) 
@@ -215,93 +230,81 @@ def generate_pdf(data, booking_id):
     pdf.cell(60, 12, f"{qty} {unit}  ", 0, 1, 'R')
     
     pdf.set_draw_color(226, 232, 240)
-    pdf.line(20, pdf.get_y()+12, 190, pdf.get_y()+12)
+    pdf.line(20, pdf.get_y() + 12, 190, pdf.get_y() + 12)
 
-    filename = f"/tmp/booking_{booking_id}.pdf" # Use /tmp for serverless (Vercel)
+    # Note: Keep this as just "booking_" if testing locally on Windows. 
+    # Use "/tmp/booking_" when pushing back to Render.
+    filename = f"/tmp/booking_{booking_id}.pdf"
     pdf.output(filename)
     return filename
 
 # ==========================================
-#  📧 EMAIL FUNCTION (UPDATED STYLING)
+#  📧 EMAIL FUNCTION
 # ==========================================
 def send_email_with_pdf(pdf_filename, data):
     customer_email = data.get('email', '')
     customer_name = data.get('fullName', 'Customer')
     customer_phone = data.get('phone', 'N/A')
-    
-    # HTML Content - Styled to match your screenshot (Dark Mode Card)
+
+    # ✅ Updated HTML email template to also visually separate the route
     html_body = f"""
     <!DOCTYPE html>
     <html>
       <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #0f172a; color: #e2e8f0;">
-        
         <div style="width: 100%; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-          
           <div style="background-color: #1e293b; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);">
-            
             <div style="padding: 40px 30px;">
-              
               <h2 style="color: #ffffff; font-size: 22px; font-weight: 600; margin: 0 0 10px 0; letter-spacing: 0.5px;">New Booking Received</h2>
               <p style="color: #94a3b8; font-size: 14px; margin: 0 0 30px 0; line-height: 1.5;">
                 A new shipment booking has been placed successfully.
               </p>
 
-              <table style="width: 100%; border-collapse: collapse;">
-                
+              <h3 style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-top: 30px;">Client Details</h3>
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                 <tr>
-                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Customer:</td>
-                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">
-                    {customer_name}
-                  </td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Name:</td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #334155; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">{customer_name}</td>
                 </tr>
-
                 <tr>
-                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Email:</td>
-                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; text-align: right;">
+                  <td style="padding: 12px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Email:</td>
+                  <td style="padding: 12px 0; border-bottom: 1px solid #334155; text-align: right;">
                     <a href="mailto:{customer_email}" style="color: #3b82f6; text-decoration: none; font-size: 14px; font-weight: 500;">{customer_email}</a>
                   </td>
                 </tr>
-
                 <tr>
-                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #94a3b8; font-size: 14px;">Phone:</td>
-                  <td style="padding: 16px 0; border-bottom: 1px solid #334155; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">
-                    {customer_phone}
-                  </td>
+                  <td style="padding: 12px 0; color: #94a3b8; font-size: 14px;">Phone:</td>
+                  <td style="padding: 12px 0; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">{customer_phone}</td>
                 </tr>
-
-                <tr>
-                   <td style="padding: 16px 0; color: #94a3b8; font-size: 14px; vertical-align: top;">Destination:</td>
-                   <td style="padding: 16px 0; color: #f8fafc; font-size: 14px; font-weight: 500; text-align: right;">
-                     {data.get('address', 'N/A')}
-                   </td>
-                </tr>
-
               </table>
 
-              <div style="margin-top: 30px;">
+              <h3 style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #334155; padding-bottom: 8px; margin-top: 30px;">Shipment Route</h3>
+              <div style="background-color: #0f172a; padding: 20px; border-radius: 12px; margin-top: 15px; border: 1px solid #1e293b;">
+                  <p style="margin: 0 0 5px 0; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: bold;">Origin / Pickup</p>
+                  <p style="margin: 0 0 15px 0; font-size: 15px; color: #f8fafc; font-weight: 500;">{data.get('address', 'N/A')}</p>
+                  
+                  <p style="margin: 0 0 5px 0; font-size: 11px; color: #3b82f6; text-transform: uppercase; font-weight: bold;">Destination</p>
+                  <p style="margin: 0; font-size: 15px; color: #60a5fa; font-weight: 500;">{data.get('destinationAddress', 'N/A')}</p>
+              </div>
+
+              <div style="margin-top: 40px;">
                 <p style="font-size: 12px; color: #64748b; text-align: center;">
                   The official invoice PDF is attached to this email.
                 </p>
               </div>
-
             </div>
           </div>
-          
           <p style="text-align: center; color: #475569; font-size: 12px; margin-top: 20px;">
             &copy; 2026 Raimona Cargo. All rights reserved.
           </p>
-
         </div>
       </body>
     </html>
     """
 
     try:
-        # Read the PDF file as a list of bytes
         with open(pdf_filename, "rb") as f:
             pdf_bytes = list(f.read())
 
-        # Send via Resend API
         r = resend.Emails.send({
             "from": "Raimona Cargo <noreply@raimonacargo.in>", 
             "to": [customer_email, COMPANY_EMAIL],
@@ -329,10 +332,11 @@ def send_email_with_pdf(pdf_filename, data):
 def create_booking():
     try:
         data = request.json
-        timestamp_str = datetime.utcnow().strftime('%Y%m%d')
+        print("RECEIVED DATA:", data)
+        timestamp_str = datetime.now(timezone.utc).strftime('%Y%m%d')
         unique_suffix = str(uuid.uuid4())[:4].upper()
         order_id = f"RMC-{timestamp_str}-{unique_suffix}"
-        current_time = datetime.utcnow().isoformat() + "Z"
+        current_time = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         new_order = {
             "order_id": order_id,
@@ -348,8 +352,7 @@ def create_booking():
                 "description": data.get('productDescription'),
                 "type": data.get('orderType'),
                 "details": f"{data.get('weight')} kg" if data.get('orderType') == 'weight' else f"{data.get('boxCount')} Boxes",
-                "origin": "Online Booking", 
-                "destination": data.get('address')
+                "destination": data.get('destinationAddress')
             },
             "history": [{
                 "status": "Pending",
@@ -362,13 +365,10 @@ def create_booking():
 
         data['id'] = order_id 
         
-        # Run email in background
         def handle_email_background(data, order_id):
             try:
                 pdf_file = generate_pdf(data, order_id)
                 send_email_with_pdf(pdf_file, data)
-                
-                # Cleanup: Remove the temporary PDF file
                 if os.path.exists(pdf_file):
                     os.remove(pdf_file)
             except Exception as e:
@@ -397,7 +397,7 @@ def get_orders():
 def update_status(order_id):
     try:
         new_status = request.json.get('status')
-        current_time = datetime.utcnow().isoformat() + "Z"
+        current_time = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         order_ref = db.collection('orders').document(order_id)
         order_ref.update({
             "status": new_status,
