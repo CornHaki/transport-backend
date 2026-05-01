@@ -327,7 +327,10 @@ def send_email_with_pdf(pdf_filename, data):
 # ==========================================
 #  🚀 MAIN ROUTES
 # ==========================================
-
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({"status": "Backend is active and running"}), 200
+    
 @app.route('/api/book', methods=['POST'])
 def create_booking():
     try:
